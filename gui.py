@@ -1,5 +1,6 @@
 import threading
 import tkinter as tk
+from config import load_last_output_folder, save_last_output_folder
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -86,7 +87,7 @@ class BaseConverterScreen(tk.Frame):
         super().__init__(parent, bg=BG_COLOR)
         self.pack(fill="both", expand=True)
         self.app = app
-        self.output_folder = str(Path.home())
+        self.output_folder = load_last_output_folder(default=str(Path.home()))
         self.filename_var = tk.StringVar(value=default_filename)
 
         top_bar = tk.Frame(self, bg=BG_COLOR)
@@ -177,7 +178,8 @@ class BaseConverterScreen(tk.Frame):
         if folder:
             self.output_folder = folder
             self.folder_label.config(text=f"Output folder: {self.output_folder}")
-
+            save_last_output_folder(folder)
+    
     def _get_output_filename(self, fallback: str) -> str:
         name = self.filename_var.get().strip()
         if not name:
