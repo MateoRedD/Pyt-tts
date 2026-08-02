@@ -1,27 +1,29 @@
 import threading
 import tkinter as tk
-from config import load_last_output_folder, save_last_output_folder
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-
+from config import load_last_output_folder, save_last_output_folder
 from pdf_reader import extract_text
+from table_reader import NoTableFoundError
+from table_to_audio import process_table
 from tts_engine import text_to_mp3
 
 BG_COLOR = "#1e1e2e"
-CARD_COLOR = "#2a2a3c"
-ACCENT_COLOR = "#3c9eff"
-ACCENT_HOVER = "#6a8bef"
-TEXT_COLOR = "#e8e8f0"
-MUTED_TEXT_COLOR = "#a0a0b0"
+CARD_COLOR = "#2A2A3C"
+ACCENT_COLOR = "#3C9EFF"
+ACCENT_HOVER = "#6A8BEF"
+TEXT_COLOR = "#E8E8F0"
+MUTED_TEXT_COLOR = "#A0A0B0"
 FONT_TITLE = ("Segoe UI", 22, "bold")
-FONT_SUBTITLE = ("Segoe UI", 13, "bold")
+FONT_SUBTILE = ("Segoe UI", 13, "bold")
 FONT_BUTTON = ("Segoe UI", 13, "bold")
 FONT_LABEL = ("Segoe UI", 10)
+
 
 class PytTTSApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("pyt-tts")
+        self.title("pyt.tts")
         self.geometry("640x680")
         self.configure(bg=BG_COLOR)
         self.resizable(False, False)
@@ -30,6 +32,7 @@ class PytTTSApp(tk.Tk):
         self.container.pack(fill="both", expand=True)
 
         self.show_home_screen()
+
     def _clear_container(self):
         for widget in self.container.winfo_children():
             widget.destroy()
@@ -46,6 +49,10 @@ class PytTTSApp(tk.Tk):
         self._clear_container()
         PdfToAudioScreen(self.container, self)
 
+    def show_table_screen(self):
+        self._clear_container()
+        TableToAudioScreen(self.container, self)
+    
 class HomeScreen(tk.Frame):
     def __init__(self, parent, app: PytTTSApp):
         super().__init__(parent, bg=BG_COLOR)
@@ -56,14 +63,15 @@ class HomeScreen(tk.Frame):
         ).pack(pady=(60, 5))
         tk.Label(
             self,
-            text="Turn text of PDFs into MP3 audio",
-            font=FONT_SUBTITLE,
+            text="Turn text, PDFs, or tables into MP3 audio",
+            font=FONT_SUBTILE,
             bg=BG_COLOR,
             fg=MUTED_TEXT_COLOR,
         ).pack(pady=(0, 50))
 
         self._make_big_button("Text to Audio", app.show_text_screen).pack(pady=12)
-        self._make_big_button("Pdf to audio", app.show_pdf_screen).pack(pady=12)
+        self._make_big_button("PDF to Audio", app.show_text_screen).pack(pady=12)
+        self._make_big_button("Table to Audio", app.show_table_screen).pack(pady=12)
 
     def _make_big_button(self, text, command):
         btn = tk.Button(
@@ -134,13 +142,13 @@ class BaseConverterScreen(tk.Frame):
             fg=MUTED_TEXT_COLOR,
             wraplength=560,
         )
-        self.folder_label.pack(pady=(15, 5))
+        self.folder_label.pack(pady=(5, 5))
 
         tk.Button(
             self,
             text="Choose output folder",
             font=FONT_LABEL,
-            bg=CARD_COLOR,
+            bg=BG_COLOR,
             fg=TEXT_COLOR,
             relief="flat",
             cursor="hand2",
@@ -161,10 +169,10 @@ class BaseConverterScreen(tk.Frame):
             cursor="hand2",
             command=self._on_generate,
         )
-        self.generate_btn.pack(pady=(10, 20))
+        self.generate_btn.pack(pady=(10, 10))
 
         self.progress_bar = ttk.Progressbar(
-            self, mode="indeterminate", length=300
+            self, mode="indeterminate", length = 300
         )
         self.progress_bar.pack(pady=(0, 10))
 
@@ -179,7 +187,7 @@ class BaseConverterScreen(tk.Frame):
             self.output_folder = folder
             self.folder_label.config(text=f"Output folder: {self.output_folder}")
             save_last_output_folder(folder)
-    
+
     def _get_output_filename(self, fallback: str) -> str:
         name = self.filename_var.get().strip()
         if not name:
@@ -206,11 +214,11 @@ class BaseConverterScreen(tk.Frame):
     def _on_error(self, message):
         self.progress_bar.stop()
         self.generate_btn.config(state="normal")
-        self._set_status(f"Error: {message}", color="e06c75")
-        messagebox.showerror("pyt-tts", message)
+        self._set_status(f"Error: {message}", color="#E06C75")
 
-    def on_generate(self):
+    def _on_generate(self):
         raise NotImplementedError
+
 
 class TextToAudioScreen(BaseConverterScreen):
     def __init__(self, parent, app: PytTTSApp):
@@ -240,7 +248,7 @@ class TextToAudioScreen(BaseConverterScreen):
         self.text_box.pack(fill="both", expand=True)
 
     def _load_txt_file(self):
-        file_path = filedialog.askopenfilename(
+        file_path = filedialog.askopenfile(
             filetypes=[("Text files", "*.txt")]
         )
         if not file_path:
@@ -261,7 +269,7 @@ class TextToAudioScreen(BaseConverterScreen):
         filename = self._get_output_filename(fallback="text_output")
         output_path = str(Path(self.output_folder) / f"{filename}.mp3")
         self._run_in_thread(lambda: self._generate(text, output_path))
- 
+
     def _generate(self, text, output_path):
         try:
             text_to_mp3(text, output_path)
@@ -269,9 +277,10 @@ class TextToAudioScreen(BaseConverterScreen):
         except Exception as e:
             self.after(0, self._on_error, str(e))
 
+
 class PdfToAudioScreen(BaseConverterScreen):
     def __init__(self, parent, app: PytTTSApp):
-        super().__init__(parent, app, "PDF to Audio")
+        super().__init__(parent, app, "PDF to audio")
         self.pdf_path = None
 
         tk.Button(
@@ -287,7 +296,7 @@ class PdfToAudioScreen(BaseConverterScreen):
 
         self.pdf_label = tk.Label(
             self.body,
-            text="No PDF selected",
+            text="No PDF selected.",
             font=FONT_LABEL,
             bg=BG_COLOR,
             fg=MUTED_TEXT_COLOR,
@@ -319,13 +328,80 @@ class PdfToAudioScreen(BaseConverterScreen):
             if not text or not text.strip():
                 self.after(
                     0, self._on_error,
-                    "Could not extract from PDF (scanned/image-based PDF?)"
+                    "Could not extract text from PDF (scanned/image-based PDF?)"
                 )
                 return
             text_to_mp3(text, output_path)
             self.after(0, self._on_succes, output_path)
         except Exception as e:
             self.after(0, self._on_error, str(e))
+
+
+class TableToAudioScreen(BaseConverterScreen):
+    def __init__(self, parent, app:PytTTSApp):
+        super().__init__(parent, app, "Table to Audio")
+        self.table_path = None
+
+        tk.Button(
+            self.body,
+            text="Choose table file (.csv, .xlsx, .pdf)",
+            font=FONT_LABEL,
+            bg=CARD_COLOR,
+            fg=TEXT_COLOR,
+            relief="flat",
+            cursor="hand2",
+            command=self._choose_table_file,
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.table_label = tk.Label(
+            self.body,
+            text="No file selected.",
+            font=FONT_LABEL,
+            bg=BG_COLOR,
+            fg=MUTED_TEXT_COLOR,
+            wraplength=560,
+            justify="left",
+        )
+        self.table_label.pack(anchor="w")
+
+    def _choose_table_file(self):
+        file_path = filedialog.askopenfilename(
+            filetypes=[("Table files", "*.csv *.xlsx *.pdf")]
+        )
+        if file_path:
+            self.table_path = file_path
+            self.table_label.config(text=f"Selected: {file_path}")
+            if not self.filename_var.get().strip():
+                self.filename_var.set(Path(file_path).stem)
+
+    def _on_generate(self):
+        if not self.table_path:
+            messagebox.showwarning("pyt-tts", "Please choose a table file first")
+            return
+        filename = self._get_output_filename(fallback=Path(self.table_path).stem)
+        self._run_in_thread(lambda: self._generate(filename))
+
+    def _generate(self, filename):
+        try:
+            mp3_path, png_path = process_table(
+                self.table_path, self.output_folder, filename
+            )
+            self.after(0, self._on_table_success, mp3_path, png_path)
+        except NoTableFoundError:
+            self.after(
+                0, self._on_error,
+                "No table could be found in that file (it may be an image-based table)"
+            )
+        except Exception as e:
+            self.after(0, self._on_error, str(e))
+
+    def _on_table_success(self, mp3_path, png_path):
+        self.progress_bar.stop()
+        self.generate_btn.config(state="normal")
+        self._set_status(
+            f"Done! Audio: {mp3_path} | Chart: {png_path}", color="#8FD47A"
+        )
+
 
 if __name__ == "__main__":
     app = PytTTSApp()
