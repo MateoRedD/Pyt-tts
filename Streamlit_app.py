@@ -1,5 +1,5 @@
-import tempfile
 import streamlit as st
+import tempfile
 
 from pathlib import Path
 from pdf_reader import extract_text
