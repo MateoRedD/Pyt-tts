@@ -6,7 +6,7 @@ from piper import PiperVoice
 import imageio_ffmpeg
 
 FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
-MODEL_PATH = Path(__file__).parent / "models" / "en_us-lessac-medium.onnx"
+MODEL_PATH = Path(__file__).parent / "models" / "en_US-lessac-medium.onnx"
 
 _voice = PiperVoice.load(str(MODEL_PATH))
 
