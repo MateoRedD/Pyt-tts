@@ -1,0 +1,8 @@
+streamlit
+pdfplumber
+piper-tts
+imageio-ffmpeg
+pandas
+openpyxl
+matplotlib
+google-genai

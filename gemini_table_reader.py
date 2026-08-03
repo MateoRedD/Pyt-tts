@@ -2,14 +2,31 @@ import json
 import os
 import pandas as pd
 
-from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 MODEL_NAME = "gemini-3.6-flash"
+
+def _load_api_key():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
+    key = os.getenv("GEMINI_API_KEY")
+    if key:
+        return key
+
+    try:
+        import streamlit as st
+        return st.secrets.get("GEMINI_API_KEY")
+    except Exception:
+        return None
+
+GEMINI_API_KEY = _load_api_key()
 
 CLASSIFY_PROMPT = (
       "Look at this image. Is it primarily a data table (rows and columns of "
@@ -28,6 +45,7 @@ def _get_client() -> genai.client:
     if not GEMINI_API_KEY:
         raise ValueError(
             "GEMINI_API_KEY not found. Add it to a .env file in the project folder"
+            "Streamlit Cloud's Secrets (deployed use)."
         )
     return genai.Client(api_key=GEMINI_API_KEY)
 
