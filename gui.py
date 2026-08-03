@@ -1,5 +1,7 @@
 import threading
 import tkinter as tk
+
+from smart_pdf import process_smart_pdf
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from config import load_last_output_folder, save_last_output_folder
@@ -49,6 +51,10 @@ class PytTTSApp(tk.Tk):
         self._clear_container()
         PdfToAudioScreen(self.container, self)
 
+    def show_smart_pdf_screen(self):
+        self._clear_container()
+        SmartPdfScreen(self.container, self)
+
     def show_table_screen(self):
         self._clear_container()
         TableToAudioScreen(self.container, self)
@@ -72,6 +78,7 @@ class HomeScreen(tk.Frame):
         self._make_big_button("Text to Audio", app.show_text_screen).pack(pady=12)
         self._make_big_button("PDF to Audio", app.show_text_screen).pack(pady=12)
         self._make_big_button("Table to Audio", app.show_table_screen).pack(pady=12)
+        self._make_big_button("Smart PDF (text + tablas)", app.show_smart_pdf_screen).pack(pady=12)
 
     def _make_big_button(self, text, command):
         btn = tk.Button(
@@ -403,6 +410,73 @@ class TableToAudioScreen(BaseConverterScreen):
         )
 
 
+class SmartPdfScreen(BaseConverterScreen):
+    def __init__(self, parent, app: PytTTSApp):
+        super().__init__(parent, app, "Smart PDF")
+        self.pdf_path = None
+        tk.Button(
+            self.body,
+            text="Choose PDF file",
+            font=FONT_LABEL,
+            bg=CARD_COLOR,
+            fg=TEXT_COLOR,
+            relief="flat",
+            cursor="hand2",
+            command=self._choose_pdf,
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.pdf_label = tk.Label(
+            self.body,
+            text="No PDF selected",
+            font=FONT_LABEL,
+            bg=BG_COLOR,
+            fg=MUTED_TEXT_COLOR,
+            wraplength=560,
+            justify="left",
+        )
+        self.pdf_label.pack(anchor="w", pady=(0, 8))
+
+        tk.Label(
+            self.body,
+            text="Detects text, tables, and image-based tables automatically. "
+                 "Image tables are read using Gemini (requires an internet connection "
+                 "and a GEMINI_API_KEY in your .env file).",
+            font=FONT_LABEL,
+            bg=BG_COLOR,
+            fg=MUTED_TEXT_COLOR,
+            wraplength=560,
+            justify="left",
+        ).pack(anchor="w")
+    def _choose_pdf(self):
+        file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+        if file_path:
+            self.pdf_path = file_path
+            self.pdf_label.config(text=f"Selected: {file_path}")
+            if not self.filename_var.get().strip():
+                self.filename_var.set(Path(file_path).stem)
+
+    def _on_generate(self):
+        if not self.pdf_path:
+            messagebox.showwarning("pyt-tts", "Please choose a PDF file first.")
+            return
+        filename = self._get_output_filename(fallback=Path(self.pdf_path).stem)
+        self._run_in_thread(lambda: self._generate(filename))
+
+    def _generate(self, filename):
+        try:
+            result = process_smart_pdf(self.pdf_path, self.output_folder, filename)
+            self.after(0, self._on_smart_pdf_success, result)
+        except Exception as e:
+            self.after(0, self._on_error, str(e))
+
+    def _on_smart_pdf_success(self, result):
+        self.progress_bar.stop()
+        self.generate_btn.config(state="normal")
+        chart_count = len(result["chart_paths"])
+        chart_note = f" | {chart_count} chart(s) generated" if chart_count else ""
+        self._set_status(
+            f"Done! Audio: {result['mp3_path']}{chart_note}", color="#8FD47A"
+        )
 if __name__ == "__main__":
     app = PytTTSApp()
     app.mainloop()
