@@ -1,0 +1,93 @@
+# pyt-tts
+
+A personal tool I built to listen to my PDFs and notes instead of reading them. Started as a simple "PDF to MP3" script and grew into something that also reads tables out loud (with stats and a chart) and can even make sense of tables that are just images, using Gemini as a fallback.
+
+Everything runs locally and for free — no cloud rendering, no paid APIs required for the core features. Gemini is the one exception, and it's optional (only kicks in for scanned/image-based tables).
+
+## What it does
+
+- **Text to Audio** — paste text or upload a `.txt`, get an MP3 back.
+- **PDF to Audio** — extracts clean text from a text-based PDF and reads it out loud.
+- **Table to Audio** — reads a table from a `.csv`, `.xlsx`, or `.pdf`, and instead of just reading numbers at you, it describes the data: averages, medians, standard deviation, percentages. It also spits out a bar chart PNG alongside the audio.
+- **Smart PDF** — the most ambitious one. Goes through a PDF page by page: normal text gets read normally, native tables get described with stats, and if a page has no extractable text or table (i.e. it's probably a scanned image), it asks Gemini "is this a table?" — if yes, it reads the data out of the image; if no, it just skips the page instead of guessing.
+
+## Why it exists
+
+I wanted to listen to my study PDFs while doing other stuff, and none of the "PDF to speech" tools I found handled tables in any useful way — they'd either skip them entirely or just read raw numbers with no context. This scratches that itch.
+
+## Tech stack
+
+- **[Piper](https://github.com/rhasspy/piper)** — local, offline text-to-speech (no GPU needed)
+- **ffmpeg** (via `imageio-ffmpeg`) — WAV → MP3 conversion
+- **pdfplumber** — PDF text and table extraction
+- **pandas** — table parsing (CSV/Excel/PDF all end up as the same DataFrame shape)
+- **matplotlib** — chart generation
+- **[Gemini API](https://ai.google.dev/)** (`gemini-3.6-flash`) — only used for image-based tables in Smart PDF
+- **tkinter** — the desktop GUI
+- **Streamlit** — the web version (same core logic, browser-based interface)
+
+## Two ways to run it
+
+### Desktop app (tkinter)
+
+```bash
+pip install -r requirements.txt
+python gui.py
+```
+
+Opens a window with four buttons: Text, PDF, Table, and Smart PDF to Audio. Pick a mode, choose your file(s), pick an output folder, hit generate.
+
+### Web version (Streamlit)
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Same four modes, but as tabs in a browser instead of a desktop window — you upload files instead of browsing your filesystem, and you get a download button instead of picking an output folder. Useful if you want to try it without installing anything locally, or to share a live demo.
+
+(https://pyt-tts--demo.streamlit.app/)
+
+There's also a bare-bones CLI (`main.py`) for the original PDF-to-audio flow, if you just want to pipe a file through the terminal:
+
+```bash
+python main.py path/to/file.pdf output.mp3
+```
+
+## Setup
+
+You'll need the Piper voice model files in `models/` (not included in a fresh clone if you're starting from scratch — grab a voice from the [Piper voices repo](https://github.com/rhasspy/piper/blob/master/VOICES.md), this project defaults to `en_US-lessac-medium`).
+
+For the Gemini fallback (Smart PDF only), you'll need an API key from [Google AI Studio](https://aistudio.google.com/). Set it as:
+- a `.env` file with `GEMINI_API_KEY=...` for local/desktop use, or
+- a Streamlit Cloud secret with the same name, for the deployed version.
+
+If you skip this, everything still works except the "this scanned page might be a table" fallback — you'll just get a `NoTableFoundError` on image-based tables instead.
+
+## Project structure
+
+```
+tts_engine.py           # text -> MP3 (Piper + ffmpeg)
+pdf_reader.py            # PDF -> clean text (word-position reconstruction)
+table_reader.py          # csv/xlsx/pdf -> DataFrame
+table_stats.py           # DataFrame -> spoken statistical description
+chart_generator.py       # DataFrame -> bar chart PNG
+gemini_table_reader.py   # image -> "is this a table?" + structured data, via Gemini
+table_to_audio.py        # ties table_reader + table_stats + chart_generator + tts_engine together
+smart_pdf.py             # page-by-page PDF orchestration (text / native table / image table)
+config.py                # remembers your last-used output folder
+
+gui.py                   # desktop interface (tkinter)
+streamlit_app.py         # web interface (Streamlit)
+main.py                  # original CLI entry point
+```
+
+## A few honest limitations
+
+- No OCR for scanned *text* pages — only scanned *tables* get the Gemini treatment. A fully scanned page of paragraphs will just get skipped with a warning.
+- The line-wrap word-spacing issue in PDFs (e.g. titles running into the next paragraph without a space) is a known, accepted trade-off — an earlier version tried to detect paragraph breaks and fix this properly, but it introduced awkward pauses everywhere else, which was worse for actually listening to the audio. Simplicity won.
+- Smart PDF's Gemini fallback needs an internet connection and API key — it's the one part of this project that isn't fully local/offline.
+- Chart generation only plots the *first* numeric column it finds in a table, on purpose — plotting multiple columns with wildly different scales (like revenue in the thousands next to a percentage) tends to produce charts nobody can actually read.
+
+## Status
+
+Working end to end: all four modes tested locally and (mostly) on Streamlit Cloud. Built incrementally, a piece at a time, rather than all at once — which is also just an honest description of how most of the bugs above got found and fixed.
